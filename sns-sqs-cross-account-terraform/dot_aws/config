@@ -1,0 +1,6 @@
+[default]
+region=us-east-1
+[profile src]
+region = us-east-1
+[profile dst]
+region = us-east-1
