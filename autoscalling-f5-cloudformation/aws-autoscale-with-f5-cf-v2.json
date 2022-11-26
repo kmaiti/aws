@@ -1,0 +1,350 @@
+{
+"AWSTemplateFormatVersion" : "2010-09-09",
+"Description" : "This template will be used for autocalling servers. Server will be added or removed based on CPU utilization metrics. Stack will inform F5 loadbalancer to modify LB pool through python based opensource application",
+
+"Parameters" : {
+  "Email" : {
+      "Description" : "Email address where message will be delivered",
+      "Type" : "String",
+      "Default" : "kamal.maiti@gmail.com"
+
+    },
+    "EndpointHTTP" : {
+    "Description" : "HTTP endpoint where message will be delivered",
+    "Type": "String",
+    "Default": "http://5.3.4.5/scale"
+    },
+  "Customer" : {
+      "Description" : "Name of the customer",
+      "Type" : "String",
+      "Default" : "test",
+      "AllowedValues" : ["example", "test", "demo","utiba","tyco"]
+    },
+  "ServerVpc" : {
+      "Description" : "Defined VPC",
+      "Type" : "String",
+      "Default" : "vpc-XXX",
+      "AllowedValues" : ["vpc-XXX"]
+    } ,
+  "ServerNumber" : {
+      "Description" : "ServerNumber",
+      "Type" : "Number",
+      "Default" : "601",
+      "MinValue" : "101",
+      "MaxValue" :"999"
+     },
+ "ServerEnvironment" : {
+      "Description" : "ServerEnvironment(Prod,Plab,Uat)",
+      "Type" : "String",
+       "Default" : "uat",
+       "AllowedValues" : ["prod","plab", "uat"]
+      },
+ "ServerImage" : {
+      "Description" : "Image ID",
+      "Type" : "String",
+      "Default" : "ami-fe119792",
+      "AllowedValues" : ["ami-8ba52596","ami-d59a19c8","ami-426eea2e","ami-fe119792"]
+    },
+  "ServerKey" : {
+    "Description" : "Public Key for accessing Server",
+    "Type" : "String",
+    "Default" : "AMI-5-8"
+
+    },
+   "ServerTypeApp" : {
+      "Description" : "This server type is for web",
+    "Type" : "String",
+    "Default" : "app"
+      } ,
+
+  "SGforSNServer" : {
+      "Description" : "Service network Security group",
+      "Type" : "String",
+      "Default" : "sg-d314a8b6",
+      "AllowedValues" : ["sg-d314a8b6"]
+    },
+  "SGforAppServer" : {
+      "Description" : "Security group for App aka engine servers",
+      "Type" : "String",
+      "Default" : "sg-53863936",
+      "AllowedValues" : ["sg-53863936"]
+    },
+    "SubnetForApp" :{
+    "Description" : "Subnet for App Server",
+    "Type" : "String",
+    "Default" : "subnet-2fee764a",
+    "AllowedValues" : ["subnet-2fee764a"]
+    },
+    "PuppetMaster" : {
+    "Description" : "Puppet Master",
+    "Type" : "String",
+    "Default" : "customer-uat-util-101",
+    "AllowedValues" : ["customer-uat-util-101", "customer-uat-util-201"]
+    },
+    "PuppetEnv" : {
+    "Description" : "Puppet Master",
+    "Type" : "String",
+    "Default" : "dummy",
+    "AllowedValues" : ["sn_gru2test","exampletest","dummy"]
+        },
+    "Domain" : {
+    "Description" : "Domain name",
+    "Type" : "String",
+    "Default" : "gru2.customer.net",
+    "AllowedValues" : ["gru2.customer.net"]
+    },
+    "Region" : {
+      "Description" : "Region",
+      "Type" : "String",
+      "Default" : "sa-east-1"
+    },
+    "Zone" : {
+      "Description" : "Availablity zone",
+      "Type" : "String",
+      "Default" : "sa-east-1a",
+      "AllowedValues" : ["sa-east-1a", "sa-east-1b","sa-east-1c"]
+    },
+    "TagCostValue" : {
+      "Description" : "Tag Cost center Value",
+      "Type" : "String",
+      "Default" : "Company UAT BR SN",
+      "AllowedValues" : ["Company UAT BR SN"]
+    }
+  },
+
+"Resources" : {
+  "AppServerAutoScalingGroup" : {
+      "Type" : "AWS::AutoScaling::AutoScalingGroup",
+      "Properties" : {
+        "AvailabilityZones" : [ {"Ref" : "Zone"} ],
+        "VPCZoneIdentifier" : [{"Ref" : "SubnetForApp"}],
+        "LaunchConfigurationName" : { "Ref" : "AppServerLaunchConfig" },
+        "MinSize" : "1",
+        "MaxSize" : "10",
+        "Cooldown" : "600",
+        "TerminationPolicies" : [ "NewestInstance" ],
+        "NotificationConfiguration" : {
+        "TopicARN" : "arn:aws:sns:sa-east-1:499082939535:testing123",
+         "NotificationTypes" : [
+            "autoscaling:EC2_INSTANCE_LAUNCH",
+            "autoscaling:EC2_INSTANCE_LAUNCH_ERROR",
+            "autoscaling:EC2_INSTANCE_TERMINATE",
+            "autoscaling:EC2_INSTANCE_TERMINATE_ERROR"
+         ]
+      },
+
+   "Tags": [{
+           "Key":"Name",
+           "Value":"new-instance",
+           "PropagateAtLaunch" : "true" },
+
+        { "Key":"Cost Center",
+           "Value": {"Ref" : "TagCostValue"} ,
+            "PropagateAtLaunch" : "true"}
+       ]
+      },
+
+    "CreationPolicy" : {
+        "ResourceSignal" : {
+          "Timeout" : "PT15M"
+        }
+      },
+      "UpdatePolicy": {
+        "AutoScalingRollingUpdate": {
+          "MinInstancesInService": "1",
+          "MaxBatchSize": "1",
+          "PauseTime" : "PT15M",
+          "WaitOnResourceSignals": "true"
+        }
+      }
+
+    },
+"AppServerLaunchConfig" : {
+   "Type" : "AWS::AutoScaling::LaunchConfiguration",
+   "Metadata" : {
+             "AWS::CloudFormation::Init" : {
+               "configSets" : {
+                    "InstallSoftware" : ["Install"]
+                      },
+                    "Install" : {
+                       "files" : {
+                        "/etc/puppet/puppet.conf" : {
+                          "content" : { "Fn::Join" : [ "", [
+                             "#Test Content \n",
+                              "[main] \n",
+                              "logdir = /var/log/puppet \n",
+                              "rundir = /var/run/puppet \n",
+                              "ssldir = /var/lib/puppet/ssl \n",
+                              "[agent] \n",
+                              "classfile = /var/lib/puppet/classes.txt \n",
+                              "localconfig = /var/lib/puppet/localconfig \n",
+                              "environment = ",{"Ref" : "PuppetEnv"}, "\n",
+                              "server = ", {"Ref" : "PuppetMaster"},".", {"Ref" : "Domain"}, "\n",
+                              "report = true \n"
+                                   ]]},
+                           "mode"    : "000644",
+                           "owner"   : "root",
+                           "group"   : "root"
+                          },
+                      "/etc/cfn/cfn-hup.conf" : {
+                           "content" : { "Fn::Join" : ["", [
+                             "[main]\n",
+                            "stack=", { "Ref" : "AWS::StackId" }, "\n",
+                            "region=", { "Ref" : "Region" }, "\n"
+                                  ]]},
+                           "mode"    : "000400",
+                           "owner"   : "root",
+                           "group"   : "root"
+                           },
+              "/etc/cfn/hooks.d/cfn-auto-reloader.conf" : {
+                "content": { "Fn::Join" : ["", [
+                  "[cfn-auto-reloader-hook]\n",
+                  "triggers=post.update\n",
+                  "path=Resources.WebServerInstance.Metadata.AWS::CloudFormation::Init\n",
+                  "action=/opt/aws/bin/cfn-init -v ",
+                  "         --stack ", { "Ref" : "AWS::StackName" },
+                  "         --resource AppServerLaunchConfig ",
+                  "         --configsets InstallSoftware ",
+                  "         --region ", { "Ref" : "Region" }, "\n",
+                  "runas=root\n"
+                ]]}
+               }
+            },
+                 "commands" : {
+                    "configure Server" : {
+                      "command" : { "Fn::Join" : ["", [
+                         "#Set the hostname \n",
+                        "AWS_ACCESS_KEY=\"XXXXX\" \n",
+                        "AWS_SECRET_KEY=\"XXXXX\" \n",
+                        "AG=\"AppServerAutoScalingGroup\" \n",
+                        "REGION=\"",{ "Ref" : "Region" }, "\"\n",
+                        "SERVERNUM=\"", {"Ref": "ServerNumber"}, "\"\n",
+                        "CUSTOMER=\"", {"Ref": "Customer"}, "\"\n",
+                        "TYPE=\"", {"Ref" : "ServerEnvironment"}, "\"\n",
+                        "PURPOSE=\"", {"Ref" : "ServerTypeApp"}, "\"\n",
+                        "DOMAIN=\"", {"Ref" :"Domain"}, "\"\n",
+                      "logger \"$AG : $REGION : $SERVERNUM: $CUSTOMER: $TYPE : $PURPOSE : $DOMAIN \" \n" ,
+                      "timeout=$(( $RANDOM % 60 + 2 )) \n",
+                      "/bin/sleep $timeout \n",
+"/usr/bin/python /root/scripts/aws-autoscale-ec2-instance-modify.py -a $AWS_ACCESS_KEY  -s $AWS_SECRET_KEY -g $AG -r $REGION -n $SERVERNUM -c $CUSTOMER -t $TYPE -p  $PURPOSE  -d $DOMAIN \n",
+                        "HOST=$(cat /tmp/nodename) \n",
+                        "IP_ADDR=$(/sbin/ifconfig eth0 |  /bin/awk '/inet addr/ {print $2}' | /bin/cut -d : -f 2) \n",
+                        "SHOST=$(echo $HOST | /bin/cut -d . -f 1) \n",
+                        "/bin/sed -i s/HOSTNAME=.*/HOSTNAME=$HOST/ /etc/sysconfig/network \n",
+                        "/bin/hostname $HOST \n",
+                        "echo -e \"$IP_ADDR\t$HOST\t$SHOST \n\" >> /etc/hosts \n",
+
+                      "logger 'cloudformation commands completed' \n"
+                         ]]
+                      }
+                   }
+                },
+
+              "services" : {
+                "sysvinit" : {
+                  "puppet"   : { "enabled" : "true", "ensureRunning" : "true" },
+                  "cfn-hup" : { "enabled" : "true", "ensureRunning" : "true",
+                              "files" : ["/etc/cfn/cfn-hup.conf", "/etc/cfn/hooks.d/cfn-auto-reloader.conf"]}
+              }
+            }
+          }
+       }
+    },
+
+   "Properties" : {
+        "SecurityGroups": [  {"Ref" : "SGforAppServer" }, {"Ref": "SGforSNServer"}  ],
+        "KeyName": {"Ref" : "ServerKey"},
+        "ImageId"  : {"Ref" : "ServerImage"},
+        "InstanceType" : "m3.large",
+        "InstanceMonitoring" : "false",
+     "UserData": {
+      "Fn::Base64":{ "Fn::Join":[ "", [
+              "#!/bin/bash -xe\n",
+            "sed -i 's/SELINUX=enforcing/SELINUX=permissive/' /etc/selinux/config \n",
+            "setenforce Permissive \n",
+           "# Install the files and packages from the metadata\n",
+             "/opt/aws/bin/cfn-init -v ",
+             "         --stack ", { "Ref" : "AWS::StackName" },
+             "         --resource  AppServerLaunchConfig",
+             "         --configsets  InstallSoftware",
+             "         --region ", { "Ref" : "Region" }, "\n",
+
+
+            "# Start up the cfn-hup daemon to listen for changes to the metadata\n",
+            "/opt/aws/bin/cfn-hup || error_exit 'Failed to start cfn-hup'\n",
+
+             "# Signal the status from cfn-init\n",
+             "/opt/aws/bin/cfn-signal -e $? ",
+             "         --stack ", { "Ref" : "AWS::StackName" },
+             "         --resource AppServerAutoScalingGroup",
+             "         --region ", { "Ref" : "Region" }, "\n"
+
+            ]]
+          }
+        }
+       }
+      },
+
+   "AppServerScaleUpPolicy" : {
+      "Type" : "AWS::AutoScaling::ScalingPolicy",
+      "Properties" : {
+        "AdjustmentType" : "ChangeInCapacity",
+        "AutoScalingGroupName" : { "Ref" : "AppServerAutoScalingGroup" },
+        "Cooldown" : "120",
+        "ScalingAdjustment" : "1"
+      }
+    },
+    "AppServerScaleDownPolicy" : {
+      "Type" : "AWS::AutoScaling::ScalingPolicy",
+      "Properties" : {
+        "AdjustmentType" : "ChangeInCapacity",
+        "AutoScalingGroupName" : { "Ref" : "AppServerAutoScalingGroup" },
+        "Cooldown" : "120",
+        "ScalingAdjustment" : "-1"
+      }
+    },
+
+    "AppCPUAlarmHigh": {
+     "Type": "AWS::CloudWatch::Alarm",
+     "Properties": {
+        "AlarmDescription": "Scale-up if CPU > 5% for 1 minute",
+        "MetricName": "CPUUtilization",
+        "Namespace": "AWS/EC2",
+        "Statistic": "Average",
+        "Period": "60",
+        "EvaluationPeriods": "1",
+        "Threshold": "5",
+        "AlarmActions": [ { "Ref": "AppServerScaleUpPolicy" } ],
+        "Dimensions": [
+          {
+            "Name": "AutoScalingGroupName",
+            "Value": { "Ref": "AppServerAutoScalingGroup" }
+          }
+        ],
+        "ComparisonOperator": "GreaterThanThreshold"
+      }
+    },
+    "AppCPUAlarmLow": {
+     "Type": "AWS::CloudWatch::Alarm",
+     "Properties": {
+        "AlarmDescription": "Scale-down if CPU < 3% for 2 minutes",
+        "MetricName": "CPUUtilization",
+        "Namespace": "AWS/EC2",
+        "Statistic": "Average",
+        "Period": "120",
+        "EvaluationPeriods": "1",
+        "Threshold": "3",
+        "AlarmActions": [ { "Ref": "AppServerScaleDownPolicy" } ],
+        "Dimensions": [
+          {
+            "Name": "AutoScalingGroupName",
+            "Value": { "Ref": "AppServerAutoScalingGroup" }
+          }
+        ],
+        "ComparisonOperator": "LessThanThreshold"
+      }
+    }
+
+  }
+}
+

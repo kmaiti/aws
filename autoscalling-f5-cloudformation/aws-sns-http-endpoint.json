@@ -1,0 +1,32 @@
+{
+"EndpointHTTP" : {
+    "Description" : "HTTP endpoint where message will be delivered",
+    "type": "String",
+    "Default": "http://<public IP>/scale"
+    },
+"Email" : {
+      "Description" : "Email address where message will be delivered",
+      "Type" : "String",
+      "Default" : "<email ID>"
+
+    },
+  
+
+"AppSNSTopic" : {
+    "Type" : "AWS::SNS::Topic",
+    "Properties" : {
+        "DisplayName" : "AppSNSTopic",
+        "TopicName" : "AppSNSTopic",
+        "Subscription" : [ {
+            "Endpoint" : {"Ref": "Email"},
+            "Protocol" : "email"
+        },
+     {
+            "Endpoint" : { "Ref": "EndpointHTTP" },
+            "Protocol" : "http"
+        }
+
+     ]
+    }
+   }
+}
